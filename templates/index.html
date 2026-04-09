@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS 178 — Lab 16: Image Processor</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 60px auto;
+        padding: 0 24px;
+        background: #f5f5f5;
+        color: #222;
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin-bottom: 4px;
+      }
+      .subtitle {
+        color: #666;
+        margin-bottom: 4px;
+        font-size: 0.95rem;
+      }
+      .lab-link {
+        font-size: 0.85rem;
+        color: #888;
+        margin-bottom: 28px;
+        display: block;
+      }
+      .lab-link a {
+        color: #ff9900;
+        text-decoration: none;
+      }
+      .lab-link a:hover {
+        text-decoration: underline;
+      }
+
+      .card {
+        background: white;
+        border-radius: 10px;
+        padding: 28px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        margin-bottom: 28px;
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin-top: 0;
+      }
+
+      input[type="file"] {
+        margin: 12px 0;
+        display: block;
+      }
+
+      button {
+        background: #00d0ff;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 6px;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #00b4e6;
+      }
+
+      /* Pipeline steps — no badges */
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        margin-bottom: 8px;
+      }
+      .step-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .step-left {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 28px;
+        flex-shrink: 0;
+      }
+      .step-num {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 600;
+        flex-shrink: 0;
+        background: #f0f0f0;
+        color: #444;
+        border: 1px solid #d0d0d0;
+      }
+      .step-connector {
+        width: 1.5px;
+        flex: 1;
+        min-height: 12px;
+        background: #e0e0e0;
+        margin: 2px 0;
+      }
+      .step-content {
+        padding-bottom: 12px;
+      }
+      .step-title {
+        font-size: 0.88rem;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+      .step-desc {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 2px;
+        line-height: 1.5;
+      }
+
+      /* Image comparison grid */
+      .img-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .img-grid img {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        display: block;
+      }
+      .img-label {
+        font-size: 0.78rem;
+        color: #888;
+        text-align: center;
+        margin-top: 6px;
+      }
+
+      .waiting {
+        color: #888;
+        font-style: italic;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CS 178 — Lab 16: Serverless Image Processor</h1>
+    <p class="subtitle">
+      Upload an image — Lambda flips it automatically via S3.
+    </p>
+    <span class="lab-link"
+      ><a href="https://hackmd.io/@profmoore/cs178-lab16" target="_blank"
+        >Lab 16 instructions</a
+      ></span
+    >
+
+    <!-- Pipeline card -->
+    <div class="card">
+      <h2>How this works</h2>
+      <div class="steps">
+        <div class="step-row">
+          <div class="step-left">
+            <div class="step-num">1</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-title">You upload an image</div>
+            <div class="step-desc">
+              The form sends your file to Flask's <code>/upload</code> route.
+            </div>
+          </div>
+        </div>
+
+        <div class="step-row">
+          <div class="step-left">
+            <div class="step-num">2</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-title">Flask uploads it to S3</div>
+            <div class="step-desc">
+              <code>boto3.upload_fileobj()</code> puts the file in your
+              <code>[initials]-image-source</code> bucket.
+            </div>
+          </div>
+        </div>
+
+        <div class="step-row">
+          <div class="step-left">
+            <div class="step-num">3</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-title">
+              S3 fires an event — Lambda wakes up automatically
+            </div>
+            <div class="step-desc">
+              The moment the file lands in S3, AWS calls your Lambda function.
+              No polling, no cron job.
+            </div>
+          </div>
+        </div>
+
+        <div class="step-row">
+          <div class="step-left">
+            <div class="step-num">4</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-title">Lambda flips the image</div>
+            <div class="step-desc">
+              Pillow flips it upside down and saves the result to your
+              <code>[initials]-image-source-processed</code> bucket.
+            </div>
+          </div>
+        </div>
+
+        <div class="step-row">
+          <div class="step-left"><div class="step-num">5</div></div>
+          <div class="step-content">
+            <div class="step-title">Flask shows you the result</div>
+            <div class="step-desc">
+              Pre-signed S3 URLs are generated for both the original and flipped
+              image and displayed below.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload form -->
+    <div class="card">
+      <h2>Upload an image</h2>
+      <form action="/upload" method="POST" enctype="multipart/form-data">
+        <input
+          type="file"
+          name="image"
+          accept="image/jpeg,image/png"
+          required
+        />
+        <button type="submit">Upload &amp; Process →</button>
+      </form>
+    </div>
+
+    <!-- Result section — only shown after a successful upload -->
+    {% if processed_url %}
+    <div class="card">
+      <h2>Result: <code>{{ filename }}</code></h2>
+      <p style="font-size: 0.9rem; color: #555; margin: 0 0 4px">
+        Lambda flipped this image automatically when it landed in S3.
+      </p>
+      <div class="img-grid">
+        <div>
+          <img src="{{ original_url }}" alt="Original: {{ filename }}" />
+          <div class="img-label">Original</div>
+        </div>
+        <div>
+          <img src="{{ processed_url }}" alt="Flipped: {{ filename }}" />
+          <div class="img-label">Flipped by Lambda</div>
+        </div>
+      </div>
+    </div>
+    <!-- Rekognition stretch goal card — only shown if labels JSON exists in S3 -->
+    {% if rekognition_labels %}
+    <div class="card">
+      <h2>Stretch goal: Rekognition labels</h2>
+      <p style="font-size: 0.9rem; color: #555; margin: 0 0 16px">
+        AWS Rekognition analysed your image and detected the following labels.
+        Confidence scores show how certain the model is about each one.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem">
+        <thead>
+          <tr
+            style="border-bottom: 1px solid #eee; text-align: left; color: #888"
+          >
+            <th style="padding: 6px 0">Label</th>
+            <th style="padding: 6px 0; text-align: right">Confidence</th>
+            <th style="padding: 6px 0; padding-left: 12px">Confidence bar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for label in rekognition_labels %}
+          <tr style="border-bottom: 1px solid #f5f5f5">
+            <td style="padding: 7px 0; font-weight: 600">{{ label.Name }}</td>
+            <td style="padding: 7px 0; text-align: right; color: #666">
+              {{ "%.1f"|format(label.Confidence) }}%
+            </td>
+            <td style="padding: 7px 0; padding-left: 12px">
+              <div
+                style="
+                  background: #f0f0f0;
+                  border-radius: 4px;
+                  height: 8px;
+                  width: 100%;
+                "
+              >
+                <div
+                  style="background:#00ccff; border-radius:4px; height:8px; width:{{ label.Confidence }}%;"
+                ></div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %} {% endif %}
+  </body>
+</html>
